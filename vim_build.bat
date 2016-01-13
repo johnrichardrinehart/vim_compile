@@ -1,5 +1,7 @@
 @ECHO off
-REM Environment Variables are defined below.
+
+
+REM ------- Feel free to change the environment variables defined below.  ---------
 REM STARTTIME records the start time of the script
 SET STARTTIME=%TIME%
 
@@ -21,6 +23,7 @@ SET LOGFILE="%WORKDIR%batch.log"
 REM INSTALLDIR records the location of the installation directory. All runtime
 REM files and compiled files will be placed in this directory.
 SET INSTALLDIR="C:\Program Files (x86)\vim"
+REM ----------- Don't change anything below this line -------------
 
 
 REM Check for existence of files, clearing them if necessary
