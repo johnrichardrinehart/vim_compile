@@ -1,9 +1,8 @@
 @ECHO off
 
-
 REM ------- Feel free to change the environment variables defined below.  ---------
 REM STARTTIME records the start time of the script
-SET STARTTIME=%TIME%
+SET STARTTIME=%TIME: =0%
 
 REM Get the current directory for later
 SET CURDIR=%cd%
@@ -25,23 +24,29 @@ REM files and compiled files will be placed in this directory.
 SET INSTALLDIR="C:\Program Files (x86)\vim"
 REM ----------- Don't change anything below this line -------------
 
-
 REM Check for existence of files, clearing them if necessary
 COPY /Y NUL %LOGFILE%>NUL
-COPY /Y NUL "%WORKDIR%gvim_build.log">NUl
+COPY /Y NUL "%WORKDIR%gvim_build.log">NUL
 COPY /Y NUL "%WORKDIR%vim_build.log">NUL
 COPY /Y NUL "%WORKDIR%vimrun_build.log">NUL
-IF NOT EXIST "%WORKDIR%make_ming.mak" (
-ECHO Error: "%WORKDIR%make_ming.mak" is not present. Check to make sure you have configured make_ming.mak >> %LOGFILE% ) ELSE (
-ECHO Copying "%VIMDIR%\src\make_ming.mak" to "%WORKDIR%". >> %LOGFILE%
-COPY "%VIMDIR%\src\make_ming.mak" "%WORKDIR%">NUL
-)
+REM Copy Make_ming.mak and Make_cyg_ming.mak to working directory.
+ECHO %VIMDIR%\src
+COPY /Y "%VIMDIR%"\src\Make_cyg_ming.mak .
+COPY /Y "%VIMDIR%"\src\Make_ming.mak Make_ming_copy.mak
+REM Remove the last line of Make_ming.mak (include Make_cyg_ming.mak)
+CALL:CountLines
+ECHO Total lines in Make_ming.mak : %LINES%
+GOTO EOF
+REM IF NOT EXIST "%WORKDIR%make_ming.mak" (
+REM ECHO Error: "%WORKDIR%make_ming.mak" is not present. Check to make sure you have configured make_ming.mak >> %LOGFILE% 
+REM ) ELSE (
+REM ECHO Copying "%WORKDIR%Make_ming.mak" to "%VIMDIR%\src\make_ming.mak" >> %LOGFILE%
+REM COPY "%WORKDIR%Make_ming.mak" "%VIMDIR%\src\make_ming.mak">NUL
+REM )
 
 REM Record the start time
 ECHO Started at %STARTTIME% >> %LOGFILE%
 
-REM Below, turn STARTTIME into an absolute number of centiseconds. Appraoch
-REM stolen from: http://stackoverflow.com/questions/9922498/calculate-time-difference-in-windows-batch-file
 SET /A STARTTIME=(1%STARTTIME:~0,2%-100)*360000 + (1%STARTTIME:~3,2%-100)*6000 + (1%STARTTIME:~6,2%-100)*100 + (1%STARTTIME:~9,2%-100)
 
 ECHO Work directory: "%WORKDIR%" >> %LOGFILE%
@@ -51,14 +56,8 @@ ECHO Vim target (install) directory: %INSTALLDIR% >> %LOGFILE%
 REM Update Vim
 ECHO Grabbing the latest commit from the Git repository >> %LOGFILE%
 
-REM Go to where the vim repository is located
-CD "%VIMDIR%"
+CD "%VIMDIR%\src"
 git pull origin master >> %LOGFILE% 2>&1
-
-REM ECHO Copying custom Make_ming.mak to: "%VIMDIR%\src"
-REM COPY /Q /Y "%WORKDIR%Make_ming.mak" "%VIMDIR%\src"
-REM change to Vim /src folder
-CD /D "%VIMDIR%\src"
 
 REM --- Build GUI version (gvim.exe) ---
 ECHO.>>%LOGFILE%
@@ -91,6 +90,8 @@ IF EXIST obj\NUL      RMDIR /S /Q obj
 IF EXIST obji386\NUL  RMDIR /S /Q obji386
 IF EXIST gobj\NUL     RMDIR /S /Q gobj
 IF EXIST gobji386\NUL RMDIR /S /Q gobji386
+If EXIST gobjx86-64\NUL RMDIR /S /Q gobjx86-64
+If EXIST objx86-64\NUL RMDIR /S /Q objx86-64
 IF EXIST gvim.exe DEL gvim.exe
 IF EXIST vim.exe DEL vim.exe
 IF EXIST vimrun.exe DEL vimrun.exe
@@ -102,9 +103,27 @@ COPY /Y "%WORKDIR%log.tmp" %LOGFILE%
 DEL "%WORKDIR%log.tmp"
 
 REM Get end time
-SET ENDTIME=%TIME%
+SET ENDTIME=%TIME: =0%
 ECHO Completed at %ENDTIME% >> %LOGFILE%
 SET /A ENDTIME=(1%ENDTIME:~0,2%-100)*360000 + (1%ENDTIME:~3,2%-100)*6000 + (1%ENDTIME:~6,2%-100)*100 + (1%ENDTIME:~9,2%-100)
 SET /A TIMETAKEN=(%ENDTIME%-%STARTTIME%)/100
 ECHO Took %TIMETAKEN% seconds to complete compiling^.>>%LOGFILE%
 CD "%CURDIR%"
+
+:CountLines
+setlocal EnableDelayedExpansion
+set LINES=0
+for /f "delims==" %%I in (Make_ming_copy.mak) do (
+set /a LINES=LINES+1    
+)
+
+:PrintFirstNLine
+set cur=0
+for /f "delims==" %%I in (Make_ming_copy.mak) do (      
+echo %%I        
+::echo !cur! : %%I      
+set /a cur=cur+1    
+if "!cur!"=="%LINES%" goto EOF
+) 
+
+:EOF
