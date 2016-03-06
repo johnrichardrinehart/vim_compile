@@ -1,4 +1,8 @@
 @ECHO off
+REM Next line ensures that global variables are assigned values properly
+SETLOCAL EnableDelayedExpansion
+SET PYTHONDIR=C:/Python27
+Set LUADIR=C:/Lua
 
 REM ------- Feel free to change the environment variables defined below.  ---------
 REM STARTTIME records the start time of the script
@@ -14,6 +18,7 @@ SET WORKDIR=%~dp0
 REM VIMDIR records the location of the vim/ repository relative to the working
 REM directory.
 SET VIMDIR=%WORKDIR%vim
+SET VIMSRC=%VIMDIR%\src
 
 REM LOGFILE records the location of the compilation log file specified relative to the
 REM working directory.
@@ -30,19 +35,25 @@ COPY /Y NUL "%WORKDIR%gvim_build.log">NUL
 COPY /Y NUL "%WORKDIR%vim_build.log">NUL
 COPY /Y NUL "%WORKDIR%vimrun_build.log">NUL
 REM Copy Make_ming.mak and Make_cyg_ming.mak to working directory.
-ECHO %VIMDIR%\src
-COPY /Y "%VIMDIR%"\src\Make_cyg_ming.mak .
-COPY /Y "%VIMDIR%"\src\Make_ming.mak Make_ming_copy.mak
-REM Remove the last line of Make_ming.mak (include Make_cyg_ming.mak)
+COPY /Y "%VIMDIR%"\src\Make_cyg_ming.mak Make_cyg_ming_copy.mak>NUL
+COPY /Y "%VIMDIR%"\src\Make_ming.mak Make_ming_copy.mak>NUL
+REM Count lines in Make_ming_copy.mak
 CALL:CountLines
-ECHO Total lines in Make_ming.mak : %LINES%
-GOTO EOF
-REM IF NOT EXIST "%WORKDIR%make_ming.mak" (
-REM ECHO Error: "%WORKDIR%make_ming.mak" is not present. Check to make sure you have configured make_ming.mak >> %LOGFILE% 
-REM ) ELSE (
-REM ECHO Copying "%WORKDIR%Make_ming.mak" to "%VIMDIR%\src\make_ming.mak" >> %LOGFILE%
-REM COPY "%WORKDIR%Make_ming.mak" "%VIMDIR%\src\make_ming.mak">NUL
-REM )
+REM Only include the first N-1 lines
+SET /A LINES=LINES-1
+Call:PrintFirstNLines>Make_ming.mak
+REM Append Make_cyg_min.mak to Make_ming.mak
+TYPE Make_cyg_ming_copy.mak>>Make_ming.mak
+REM Don't need the copies, anymore
+DEL Make_ming_copy.mak Make_cyg_ming_copy.mak
+
+IF NOT EXIST "%WORKDIR%make_ming.mak" (
+ECHO Error: "%WORKDIR%make_ming.mak" is not present. Check to make sure you have configured make_ming.mak >> %LOGFILE% 
+) ELSE (
+ECHO Copying "%WORKDIR%Make_ming.mak" to "%VIMDIR%\src\make_ming.mak" >> %LOGFILE%
+COPY "%WORKDIR%Make_ming.mak" "%VIMDIR%\src\make_ming.mak">NUL
+REM Removing Make_ming.mak because we no longer need it
+)
 
 REM Record the start time
 ECHO Started at %STARTTIME% >> %LOGFILE%
@@ -57,7 +68,9 @@ REM Update Vim
 ECHO Grabbing the latest commit from the Git repository >> %LOGFILE%
 
 CD "%VIMDIR%\src"
-git pull origin master >> %LOGFILE% 2>&1
+git fetch >> %LOGFILE% 2>&1
+git pull >> %LOGFILE% 2>&1
+git reset --hard HEAD
 
 REM --- Build GUI version (gvim.exe) ---
 ECHO.>>%LOGFILE%
@@ -70,6 +83,10 @@ ECHO .......... Building vim.exe (see vim_build.log) .......... >> %LOGFILE%
 ECHO.>>%LOGFILE%
 mingw32-make.exe -d -f "%WORKDIR%Make_ming.mak" GUI=no vim.exe >> "%WORKDIR%vim_build.log"
 
+ECHO .......... Building install.exe (see vimrun_build.log) .......... >> %LOGFILE%
+ECHO.>>%LOGFILE%
+mingw32-make.exe -f "%WORKDIR%Make_ming.mak" install.exe >> "%WORKDIR%vim_build.log"
+
 ECHO .......... Building vimrun.exe (see vimrun_build.log) .......... >> %LOGFILE%
 ECHO.>>%LOGFILE%
 gcc vimrun.c -o vimrun.exe >> "%WORKDIR%vimrun_build.log"
@@ -77,8 +94,11 @@ gcc vimrun.c -o vimrun.exe >> "%WORKDIR%vimrun_build.log"
 ECHO Moving compiled files. >> %LOGFILE%
 COPY /Y /D gvim.exe %INSTALLDIR%
 COPY /Y /D vim.exe %INSTALLDIR%
+COPY /Y /D install.exe %INSTALLDIR%
 COPY /Y /D vimrun.exe %INSTALLDIR%
 XCOPY /Y /S /D /Q  ..\runtime %INSTALLDIR%
+ECHO Deleting local Make_ming.mak file. >> %LOGFILE%
+DEL "%WORKDIR%Make_ming.mak
 
 ECHO Cleaning Vim source directory. >> %LOGFILE%
 REM NOTE: "mingw32-make.exe -f Make_ming.mak clean" does not finish the job
@@ -94,6 +114,7 @@ If EXIST gobjx86-64\NUL RMDIR /S /Q gobjx86-64
 If EXIST objx86-64\NUL RMDIR /S /Q objx86-64
 IF EXIST gvim.exe DEL gvim.exe
 IF EXIST vim.exe DEL vim.exe
+IF EXIST install.exe DEL install.exe
 IF EXIST vimrun.exe DEL vimrun.exe
 :THEEND
 
@@ -110,20 +131,27 @@ SET /A TIMETAKEN=(%ENDTIME%-%STARTTIME%)/100
 ECHO Took %TIMETAKEN% seconds to complete compiling^.>>%LOGFILE%
 CD "%CURDIR%"
 
-:CountLines
-setlocal EnableDelayedExpansion
-set LINES=0
-for /f "delims==" %%I in (Make_ming_copy.mak) do (
-set /a LINES=LINES+1    
-)
+GOTO :EOF
 
-:PrintFirstNLine
-set cur=0
-for /f "delims==" %%I in (Make_ming_copy.mak) do (      
-echo %%I        
-::echo !cur! : %%I      
-set /a cur=cur+1    
-if "!cur!"=="%LINES%" goto EOF
+:CountLines
+SET LINES=0
+FOR /F "delims==" %%I in (Make_ming_copy.mak) do (
+SET /A LINES=LINES+1    
+)
+EXIT /B
+
+:PrintFirstNLines
+SET CUR=0
+FOR /F "tokens=*" %%I in (Make_ming_copy.mak) do (      
+ECHO %%I        
+SET /A CUR=CUR+1    
+IF "!cur!"=="%LINES%" (
+   ECHO PYTHON=%PYTHONDIR%
+   ECHO LUA=%LUADIR%
+   GOTO :BREAK
+   )
 ) 
+:BREAK
+EXIT /B
 
 :EOF
